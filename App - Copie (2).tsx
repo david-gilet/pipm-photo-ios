@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef, useMemo} from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,34 +8,39 @@ import {
   Image,
   Animated,
   Alert,
-  PermissionsAndroid,
-  Platform,
 } from 'react-native';
-import {Camera, useCameraDevices} from 'react-native-vision-camera';
-import RNFS from 'react-native-fs';
-import {FormScreen} from './FormScreen';
+import { Camera, useCameraDevices } from 'react-native-vision-camera';
+import { FormScreen } from './FormScreen';
 
 export default function App() {
-  // --- State variables ---
+  // -----------------------
+  // États globaux
+  // -----------------------
   const [hasPermission, setHasPermission] = useState(false);
   const [mode, setMode] = useState<'form' | 'camera'>('form');
   const [projet, setProjet] = useState('');
-  const [equipement, setEquipement] = useState('');
+  const [equipement, useEquipement] = useState('');
   const [zoom, setZoom] = useState(1);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoCount, setPhotoCount] = useState(1);
   const [modalVisible, setModalVisible] = useState(false);
 
-  // --- Refs ---
+  // Animation pour la miniature photo
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Référence caméra
   const cameraRef = useRef<Camera>(null);
 
-  // --- Camera devices & zoom levels ---
+  // Récupération des devices caméra
   const devices = useCameraDevices();
   const device = useMemo(() => devices.back, [devices]);
+
+  // Zoom natifs disponibles
   const zoomLevels = useMemo(() => [0.6, 1, 2, 3], []);
 
-  // --- Request Camera permission on mount ---
+  // -----------------------
+  // useEffect : demande permission caméra au démarrage
+  // -----------------------
   useEffect(() => {
     (async () => {
       const status = await Camera.requestCameraPermission();
@@ -43,76 +48,16 @@ export default function App() {
     })();
   }, []);
 
-  // --- Request Storage permission for Android 6+ (runtime permission) ---
-  async function requestStoragePermission() {
-    if (Platform.OS === 'android' && Platform.Version < 33) {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        {
-          title: 'Permission stockage',
-          message:
-            "L'application a besoin de cette permission pour sauvegarder les photos",
-          buttonNeutral: 'Plus tard',
-          buttonNegative: 'Annuler',
-          buttonPositive: 'OK',
-        },
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    }
-    return true; // iOS or Android 13+ doesn't require explicit storage permission
-  }
-
-  // --- Fonction takePhoto : prise photo avec renommage selon équipement et compteur ---
+  // -----------------------
+  // Fonction takePhoto : prise rapide et affichage immédiat de la miniature
+  // -----------------------
   const takePhoto = async () => {
     if (!cameraRef.current) return;
     try {
-      // Prendre la photo
-      const photo = await cameraRef.current.takePhoto({flash: 'off'});
+      const photo = await cameraRef.current.takePhoto({ flash: 'off' });
+      setPhotoUri('file://' + photo.path);
+      setPhotoCount((c) => c + 1);
 
-      // Chemin dossier photos avec nom du projet
-      const dirPath = RNFS.PicturesDirectoryPath + '/' + projet.trim();
-
-      // Créer dossier s'il n'existe pas
-      const dirExists = await RNFS.exists(dirPath);
-      if (!dirExists) {
-        await RNFS.mkdir(dirPath);
-      }
-
-      // Récupérer liste fichiers dans dossier
-      const files = await RNFS.readDir(dirPath);
-
-      // Filtrer fichiers correspondant à l'équipement, ex : 'vélo(3).jpg'
-      const regex = new RegExp(
-        `^${equipement
-          .trim()
-          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\((\\d+)\\)\\.jpg$`,
-      );
-      const matchingFiles = files.filter(f => regex.test(f.name));
-
-      // Trouver plus grand numéro
-      let maxIndex = 0;
-      matchingFiles.forEach(f => {
-        const match = f.name.match(regex);
-        if (match && match[1]) {
-          const num = parseInt(match[1], 10);
-          if (num > maxIndex) maxIndex = num;
-        }
-      });
-
-      // Nom du nouveau fichier avec compteur incrémenté
-      const newIndex = maxIndex + 1;
-      const newFileName = `${equipement.trim()}(${newIndex}).jpg`;
-      const newFilePath = dirPath + '/' + newFileName;
-
-      // Déplacer la photo temporaire vers le nouveau chemin
-      await RNFS.moveFile('file://' + photo.path, newFilePath);
-      await RNFS.scanFile(newFilePath);
-
-      // Mettre à jour miniature avec la nouvelle photo
-      setPhotoUri('file://' + newFilePath);
-      setPhotoCount(c => c + 1);
-
-      // Animation miniature
       fadeAnim.setValue(0);
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -124,7 +69,9 @@ export default function App() {
     }
   };
 
-  // --- Start photo session ---
+  // -----------------------
+  // Fonction onStart : validation formulaire et passage en mode caméra
+  // -----------------------
   const onStart = () => {
     if (!projet.trim()) {
       Alert.alert('Erreur', 'Merci de saisir un nom de projet');
@@ -139,34 +86,45 @@ export default function App() {
     setMode('camera');
   };
 
-  // --- Finish photo session ---
+  // -----------------------
+  // Fonction onFinish : fin de session photo, retour formulaire
+  // -----------------------
   const onFinish = () => {
-    setEquipement('');
+    useEquipement('');
     setPhotoUri(null);
     setPhotoCount(1);
     setMode('form');
   };
 
-  // --- Reset all fields ---
+  // -----------------------
+  // Fonction onResetAll : ouvrir modale confirmation réinitialisation
+  // -----------------------
   const onResetAll = () => {
     setModalVisible(true);
   };
 
-  // --- Confirm reset modal actions ---
+  // -----------------------
+  // Fonction handleConfirmReset : confirmation réinitialisation complète
+  // -----------------------
   const handleConfirmReset = () => {
     setProjet('');
-    setEquipement('');
+    useEquipement('');
     setPhotoUri(null);
     setPhotoCount(1);
     setMode('form');
     setModalVisible(false);
   };
 
+  // -----------------------
+  // Fonction handleCancelReset : annuler réinitialisation
+  // -----------------------
   const handleCancelReset = () => {
     setModalVisible(false);
   };
 
-  // --- Modal component for reset confirmation ---
+  // -----------------------
+  // Composant ConfirmResetModal : modale personnalisée pour la réinitialisation
+  // -----------------------
   const ConfirmResetModal = () => {
     if (!modalVisible) return null;
     return (
@@ -176,14 +134,10 @@ export default function App() {
             Voulez-vous vraiment réinitialiser tous les champs ?
           </Text>
           <View style={modalStyles.modalButtons}>
-            <TouchableOpacity
-              style={modalStyles.btnCancel}
-              onPress={handleCancelReset}>
+            <TouchableOpacity style={modalStyles.btnCancel} onPress={handleCancelReset}>
               <Text style={modalStyles.btnText}>Annuler</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={modalStyles.btnConfirm}
-              onPress={handleConfirmReset}>
+            <TouchableOpacity style={modalStyles.btnConfirm} onPress={handleConfirmReset}>
               <Text style={modalStyles.btnText}>Confirmer</Text>
             </TouchableOpacity>
           </View>
@@ -192,7 +146,9 @@ export default function App() {
     );
   };
 
-  // --- Main component render ---
+  // -----------------------
+  // Rendu principal : caméra toujours montée et contrôle des modes formulaire/caméra
+  // -----------------------
   return (
     <View style={styles.container}>
       {device && hasPermission ? (
@@ -216,7 +172,7 @@ export default function App() {
             projet={projet}
             setProjet={setProjet}
             equipement={equipement}
-            setEquipement={setEquipement}
+            setEquipement={useEquipement}
             onStart={onStart}
             onResetAll={onResetAll}
           />
@@ -225,53 +181,49 @@ export default function App() {
 
       {mode === 'camera' && (
         <>
-          {/* Zoom controls */}
+          {/* Zoom natifs */}
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.zoomScroll}>
-            {zoomLevels.map(level => (
+            contentContainerStyle={styles.zoomScroll}
+          >
+            {zoomLevels.map((level) => (
               <TouchableOpacity
                 key={level}
-                style={[
-                  styles.zoomButton,
-                  zoom === level && styles.zoomButtonActive,
-                ]}
-                onPress={() => setZoom(level)}>
+                style={[styles.zoomButton, zoom === level && styles.zoomButtonActive]}
+                onPress={() => setZoom(level)}
+              >
                 <Text style={styles.zoomText}>{level}x</Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
 
-          {/* Capture button */}
+          {/* Bouton prise photo */}
           <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
             <View style={styles.innerCircle} />
           </TouchableOpacity>
 
-          {/* Photo preview thumbnail */}
+          {/* Miniature photo */}
           {photoUri && (
-            <Animated.View
-              style={[styles.previewContainer, {opacity: fadeAnim}]}>
-              <Image source={{uri: photoUri}} style={styles.previewImage} />
+            <Animated.View style={[styles.previewContainer, { opacity: fadeAnim }]}>
+              <Image source={{ uri: photoUri }} style={styles.previewImage} />
             </Animated.View>
           )}
 
-          {/* Finish button */}
+          {/* Bouton Fin */}
           <TouchableOpacity style={styles.finishButton} onPress={onFinish}>
             <Text style={styles.finishButtonText}>Fin</Text>
           </TouchableOpacity>
         </>
       )}
 
-      {/* Confirmation modal */}
       <ConfirmResetModal />
     </View>
   );
 }
 
-// --- Styles ---
 const styles = StyleSheet.create({
-  container: {flex: 1},
+  container: { flex: 1 },
   formOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#f5f5f5',
@@ -358,7 +310,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     elevation: 5,
     shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
     zIndex: 30,
@@ -370,7 +322,7 @@ const styles = StyleSheet.create({
   },
 });
 
-// --- Modal styles ---
+// Modale confirmation (inchangée)
 const modalStyles = StyleSheet.create({
   modalOverlay: {
     position: 'absolute',
@@ -393,7 +345,6 @@ const modalStyles = StyleSheet.create({
     fontSize: 18,
     marginBottom: 25,
     textAlign: 'center',
-    color: '#000', // Assure que le texte est visible
   },
   modalButtons: {
     flexDirection: 'row',
