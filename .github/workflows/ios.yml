@@ -58,7 +58,7 @@ jobs:
             -exportPath $PWD/build/ipa
 
       - name: Upload .ipa artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: PipmPhotoApp
           path: build/ipa
