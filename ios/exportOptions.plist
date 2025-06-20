@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>ad-hoc</string>
+
+  <key>teamID</key>
+  <string>23NM8VWWGR</string>
+
+  <key>signingStyle</key>
+  <string>manual</string>
+
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>com.pipm.photovisiteclean</key>
+    <string>[expo]_compipmphotovisiteclean_AdHoc_1750321204542</string>
+  </dict>
+</dict>
+</plist>
