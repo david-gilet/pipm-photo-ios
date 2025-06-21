@@ -1,62 +1,59 @@
-name: Build iOS App
+name: Build IPA
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+env:
+  DEVELOPMENT_TEAM: 23NM8VWVGR
+  P12_BASE64: ${{ secrets.P12_BASE64 }}
+  P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
 
 jobs:
-  build-ios:
-    name: Build IPA
+  build:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 18
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18
 
-      - name: Install dependencies
-        run: npm install
+    - name: Install dependencies
+      run: |
+        npm install
+        cd ios && pod install
 
-      - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-          cd ios && pod install
+    - name: Decode and import certificate
+      run: |
+        echo "$P12_BASE64" | base64 -d > certificate.p12
+        security create-keychain -p "" build.keychain
+        security default-keychain -s build.keychain
+        security unlock-keychain -p "" build.keychain
+        security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -A -T /usr/bin/codesign
+        security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
 
-      - name: Decode Provisioning Profile
-        run: |
-          echo "$PROVISIONING_BASE64" | base64 --decode > ios/PIPMVisiteurs.mobileprovision
+    - name: Build IPA
+      run: |
+        xcodebuild -workspace ios/PIPMVisiteurs.xcworkspace \
+          -scheme PIPMVisiteurs \
+          -configuration Release \
+          -sdk iphoneos \
+          -archivePath ios/build/PIPMVisiteurs.xcarchive \
+          DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM \
+          archive
 
-      - name: Decode and Import Certificate
-        run: |
-          echo "$P12_BASE64" | base64 --decode > certificate.p12
-          security create-keychain -p "" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
-          security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+        xcodebuild -exportArchive \
+          -archivePath ios/build/PIPMVisiteurs.xcarchive \
+          -exportOptionsPlist ios/exportOptions.plist \
+          -exportPath ios/build
 
-      - name: Build IPA
-        env:
-          DEVELOPMENT_TEAM: 23NM8VWWGR
-        run: |
-          xcodebuild -workspace ios/PIPMVisiteurs.xcworkspace \
-            -scheme PIPMVisiteurs \
-            -configuration Release \
-            -sdk iphoneos \
-            -archivePath ios/build/PIPMVisiteurs.xcarchive \
-            DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM \
-            archive
-
-          xcodebuild -exportArchive \
-            -archivePath ios/build/PIPMVisiteurs.xcarchive \
-            -exportOptionsPlist ios/exportOptions.plist \
-            -exportPath ios/build
-
-      - name: Upload IPA artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: PIPMVisiteurs.ipa
-          path: ios/build/*.ipa
+    - name: Upload IPA artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: PIPMVisiteurs.ipa
+        path: ios/build/*.ipa
