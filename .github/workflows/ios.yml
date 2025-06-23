@@ -4,18 +4,15 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   build:
-    name: Build iOS with xcodebuild
+    name: Build IPA
     runs-on: macos-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-      - name: Set up Node.js
+      - name: Set up Node
         uses: actions/setup-node@v3
         with:
           node-version: 18
@@ -23,50 +20,43 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Decode .p12 certificate
+      - name: Install CocoaPods
+        run: |
+          sudo gem install cocoapods
+          cd ios && pod install
+
+      - name: Decode p12 file
         run: |
           echo "${{ secrets.CERT_P12 }}" | base64 --decode > cert.p12
 
       - name: Decode provisioning profile
         run: |
-          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
+          echo "${{ secrets.PROVISION_PROFILE }}" | base64 --decode > profile.mobileprovision
 
-      - name: Install provisioning profile
-        run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          UUID=$(grep -a -E -o '[-A-Z0-9]{36}' profile.mobileprovision | head -1)
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/$UUID.mobileprovision
-
-      - name: Install certificate
+      - name: Set up keychain and import certificate
         run: |
           security create-keychain -p "" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "" build.keychain
-          security import cert.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+          security import cert.p12 -k build.keychain -P "${{ secrets.CERT_PASSWORD }}" -T /usr/bin/codesign
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
-      - name: Build iOS app
+      - name: Build IPA
         run: |
-          xcodebuild \
-            -project ios/PipmPhotoApp.xcodeproj \
+          xcodebuild -project ios/PipmPhotoApp.xcodeproj \
             -scheme PipmPhotoApp \
-            -sdk iphoneos \
             -configuration Release \
-            -archivePath ios/build/PipmPhotoApp.xcarchive \
-            archive \
-            DEVELOPMENT_TEAM=${{ secrets.DEVELOPMENT_TEAM }}
+            -sdk iphoneos \
+            -archivePath $PWD/build/PipmPhotoApp.xcarchive archive
 
-      - name: Export .ipa
-        run: |
-          xcodebuild \
-            -exportArchive \
-            -archivePath ios/build/PipmPhotoApp.xcarchive \
+          xcodebuild -exportArchive \
+            -archivePath $PWD/build/PipmPhotoApp.xcarchive \
             -exportOptionsPlist ios/exportOptions.plist \
-            -exportPath ios/build \
-            -allowProvisioningUpdates
-            
-      - name: Upload .ipa file
+            -exportPath $PWD/build
+
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: PipmPhotoApp
-          path: ios/build/*.ipa
+          name: PipmPhotoApp.ipa
+          path: build/PipmPhotoApp.ipa
