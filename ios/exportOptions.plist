@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>method</key>
-    <string>app-store</string>
+    <string>ad-hoc</string>
     <key>signingStyle</key>
     <string>manual</string>
     <key>provisioningProfiles</key>
     <dict>
-        <key>com.pipm.visiteurs</key>
-        <string>PIPMVisiteursProvisioning</string>
+        <key>com.pipm.photovisiteclean</key>
+        <string>PIPM_Photo_Visite_Clean_AdHoc_2025</string>
     </dict>
     <key>compileBitcode</key>
     <false/>
