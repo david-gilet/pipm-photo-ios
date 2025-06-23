@@ -1,31 +1,22 @@
 name: Build iOS App
 
 on:
-  push:
-    branches:
-      - main
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Build IPA
+  build-ios:
     runs-on: macos-latest
+
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
       - name: Set up Node
         uses: actions/setup-node@v3
         with:
-          node-version: 18
+          node-version: '20'
 
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install CocoaPods
-        run: |
-          sudo gem install cocoapods
-          cd ios && pod install
-
-      - name: Decode p12 file
+      - name: Decode cert.p12
         run: |
           echo "${{ secrets.CERT_P12 }}" | base64 --decode > cert.p12
 
@@ -41,6 +32,12 @@ jobs:
           security import cert.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Install dependencies
+        run: |
+          cd ios
+          pod install
+          cd ..
 
       - name: Build IPA
         run: |
