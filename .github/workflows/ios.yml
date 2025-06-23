@@ -1,59 +1,59 @@
-name: Build IPA
+name: Build iOS App
 
 on:
-  push:
-    branches:
-      - main
-
-env:
-  DEVELOPMENT_TEAM: 23NM8VWVGR
-  P12_BASE64: ${{ secrets.P12_BASE64 }}
-  P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
 
+    env:
+      P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+      P12_BASE64: ${{ secrets.CERT_P12 }}
+      PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+      DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: 18
+      - name: Decode .p12
+        run: echo "$P12_BASE64" | base64 --decode > certificate.p12
 
-    - name: Install dependencies
-      run: |
-        npm install
-        cd ios && pod install
+      - name: Decode provisioning profile
+        run: echo "$PROVISIONING_PROFILE" | base64 --decode > profile.mobileprovision
 
-    - name: Decode and import certificate
-      run: |
-        echo "$P12_BASE64" | base64 -d > certificate.p12
-        security create-keychain -p "" build.keychain
-        security default-keychain -s build.keychain
-        security unlock-keychain -p "" build.keychain
-        security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -A -T /usr/bin/codesign
-        security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+      - name: Setup keychain
+        run: |
+          security create-keychain -p "" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security import certificate.p12 -k build.keychain -P "$P12_PASSWORD" -A -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
 
-    - name: Build IPA
-      run: |
-        xcodebuild -workspace ios/PIPMVisiteurs.xcworkspace \
-          -scheme PIPMVisiteurs \
-          -configuration Release \
-          -sdk iphoneos \
-          -archivePath ios/build/PIPMVisiteurs.xcarchive \
-          DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM \
-          archive
+      - name: Setup provisioning profile
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
 
-        xcodebuild -exportArchive \
-          -archivePath ios/build/PIPMVisiteurs.xcarchive \
-          -exportOptionsPlist ios/exportOptions.plist \
-          -exportPath ios/build
+      - name: Build app
+        run: |
+          xcodebuild -workspace ios/PIPMVisiteurs.xcworkspace \
+            -scheme PIPMVisiteurs \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath ios/build/PIPMVisiteurs.xcarchive \
+            DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM \
+            archive
 
-    - name: Upload IPA artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: PIPMVisiteurs.ipa
-        path: ios/build/*.ipa
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath ios/build/PIPMVisiteurs.xcarchive \
+            -exportOptionsPlist ios/exportOptions.plist \
+            -exportPath ios/build
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: PIPMPhotoVisite.ipa
+          path: ios/build/*.ipa
