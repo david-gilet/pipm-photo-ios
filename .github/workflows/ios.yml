@@ -18,17 +18,17 @@ jobs:
 
       - name: Decode cert.p12
         run: |
-          echo "${{ secrets.CERT_P12 }}" | base64 --decode > cert.p12
+          echo "${{ secrets.P12_BASE64 }}" | base64 --decode > cert.p12
 
       - name: Decode provisioning profile
         run: |
-          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
+          echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > profile.mobileprovision
 
-      - name: Set up keychain and import certificate
+            - name: Set up keychain and import certificate
         run: |
-          security create-keychain -p "" build.keychain
+          security create-keychain -p "temp_pass" build.keychain
           security default-keychain -s build.keychain
-          security unlock-keychain -p "" build.keychain
+          security unlock-keychain -p "temp_pass" build.keychain
           security import cert.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
@@ -41,15 +41,17 @@ jobs:
 
       - name: Build IPA
         run: |
-          xcodebuild -project ios/PipmPhotoApp.xcodeproj \
+          xcodebuild -workspace ios/PipmPhotoApp.xcworkspace \
             -scheme PipmPhotoApp \
             -configuration Release \
             -sdk iphoneos \
-            -archivePath $PWD/build/PipmPhotoApp.xcarchive archive
+            -archivePath $PWD/build/PipmPhotoApp.xcarchive \
+            -allowProvisioningUpdates \
+            clean archive
 
           xcodebuild -exportArchive \
             -archivePath $PWD/build/PipmPhotoApp.xcarchive \
-            -exportOptionsPlist ios/exportOptions.plist \
+            -exportOptionsPlist ios/build/exportOptions.plist \
             -exportPath $PWD/build
 
       - name: Upload IPA
