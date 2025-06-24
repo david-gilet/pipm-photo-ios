@@ -24,14 +24,15 @@ jobs:
         run: |
           echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > profile.mobileprovision
 
-            - name: Set up keychain and import certificate
-        run: |
-          security create-keychain -p "temp_pass" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "temp_pass" build.keychain
-          security import cert.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+      - name: Set up keychain and import certificate
+        run:
+             security create-keychain -p "temp_pass" build.keychain
+             security default-keychain -s build.keychain
+            security unlock-keychain -p "temp_pass" build.keychain
+            security import cert.p12 -k build.keychain -P "${{ secrets.P12_PASSWORD }}" -T /usr/bin/codesign
+            mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+            cp profile.mobileprovision ~/Library/MobileDevice/Provisioning\ Profiles/
+
 
       - name: Install dependencies
         run: |
