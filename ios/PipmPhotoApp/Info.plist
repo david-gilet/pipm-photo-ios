@@ -49,8 +49,6 @@
   <!-- Clés de confidentialité pour iOS -->
   <key>NSCameraUsageDescription</key>
   <string>Cette application a besoin d’accéder à la caméra pour prendre des photos d’équipements.</string>
-  <key>NSPhotoLibraryAddUsageDescription</key>
-  <string>Cette application a besoin d’accéder à la galerie pour enregistrer les photos prises.</string>
   <key>NSPhotoLibraryUsageDescription</key>
   <string>Cette application a besoin d’accéder à la galerie pour afficher et enregistrer des photos.</string>
 </dict>

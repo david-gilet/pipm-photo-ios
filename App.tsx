@@ -8,11 +8,12 @@ import {
   Image,
   Animated,
   Alert,
-  PermissionsAndroid,
   Platform,
 } from 'react-native';
-import {Camera, useCameraDevices} from 'react-native-vision-camera';
+import {Camera, useCameraDevices, CameraDevice} from 'react-native-vision-camera';
 import RNFS from 'react-native-fs';
+import CameraRoll from '@react-native-camera-roll/camera-roll';
+import { check, request, PERMISSIONS, RESULTS, Permission } from 'react-native-permissions';
 import {FormScreen} from './FormScreen';
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
   const [equipement, setEquipement] = useState('');
   const [zoom, setZoom] = useState(1);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [lastPhotoUri, setLastPhotoUri] = useState<string | null>(null);
   const [photoCount, setPhotoCount] = useState(1);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -31,9 +33,57 @@ export default function App() {
   const cameraRef = useRef<Camera>(null);
 
   // --- Camera devices & zoom levels ---
-  const devices = useCameraDevices();
-  const device = useMemo(() => devices.back, [devices]);
-  const zoomLevels = useMemo(() => [0.6, 1, 2, 3], []);
+  const devices = useCameraDevices() as {
+  back?: {
+    ultraWideCamera?: CameraDevice;
+    wideAngleCamera?: CameraDevice;
+    telephotoCamera?: CameraDevice;
+  }
+};
+
+const zoomLevels = useMemo(() => [0.6, 1, 2, 3], []);
+
+const device = useMemo(() => {
+  if (!devices.back) return undefined;
+
+  if (zoom === 0.6 && devices.back.ultraWideCamera) return devices.back.ultraWideCamera;
+  if (zoom === 1 && devices.back.wideAngleCamera) return devices.back.wideAngleCamera;
+  if (zoom >= 2 && devices.back.telephotoCamera) return devices.back.telephotoCamera;
+
+  return devices.back;
+}, [devices, zoom]);
+
+
+// Demande d'autorisation pour accéder à la galerie (écriture)
+useEffect(() => {
+  const checkAndRequest = async () => {
+    if (Platform.OS !== 'ios') return; // On se concentre sur iOS ici
+
+    console.log('Début vérification permission galerie iOS');
+    const status = await check(PERMISSIONS.IOS.PHOTO_LIBRARY);
+    console.log('Status actuel permission galerie:', status);
+
+    if (status === RESULTS.DENIED || status === RESULTS.LIMITED) {
+      const result = await request(PERMISSIONS.IOS.PHOTO_LIBRARY);
+      console.log('Résultat demande permission galerie:', result);
+      if (result !== RESULTS.GRANTED) {
+        Alert.alert(
+          'Permission refusée',
+          'Merci d’autoriser l’accès à la galerie dans Réglages.'
+        );
+      }
+    } else if (status === RESULTS.BLOCKED) {
+      Alert.alert(
+        'Permission refusée',
+        'Va dans Réglages > Confidentialité > Photos pour autoriser la permission.'
+      );
+    } else if (status === RESULTS.GRANTED) {
+      console.log('Permission galerie déjà accordée');
+    }
+  };
+  checkAndRequest();
+}, []);
+
 
   // --- Request Camera permission on mount ---
   useEffect(() => {
@@ -42,25 +92,6 @@ export default function App() {
       setHasPermission(status === 'authorized');
     })();
   }, []);
-
-  // --- Request Storage permission for Android 6+ (runtime permission) ---
-  async function requestStoragePermission() {
-    if (Platform.OS === 'android' && Platform.Version < 33) {
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        {
-          title: 'Permission stockage',
-          message:
-            "L'application a besoin de cette permission pour sauvegarder les photos",
-          buttonNeutral: 'Plus tard',
-          buttonNegative: 'Annuler',
-          buttonPositive: 'OK',
-        },
-      );
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    }
-    return true; // iOS or Android 13+ doesn't require explicit storage permission
-  }
 
   // --- Fonction takePhoto : prise photo avec renommage selon équipement et compteur ---
   const takePhoto = async () => {
@@ -107,9 +138,14 @@ export default function App() {
       // Déplacer la photo temporaire vers le nouveau chemin
       await RNFS.moveFile('file://' + photo.path, newFilePath);
       await RNFS.scanFile(newFilePath);
+      await CameraRoll.save(newFilePath, {
+        type: 'photo',
+        album: projet || 'PIPM',
+     });
+
 
       // Mettre à jour miniature avec la nouvelle photo
-      setPhotoUri('file://' + newFilePath);
+      setLastPhotoUri('file://' + newFilePath);
       setPhotoCount(c => c + 1);
 
       // Animation miniature
@@ -197,13 +233,14 @@ export default function App() {
     <View style={styles.container}>
       {device && hasPermission ? (
         <Camera
-          ref={cameraRef}
-          style={StyleSheet.absoluteFill}
-          device={device}
-          isActive={mode === 'camera'}
-          zoom={zoom}
-          photo={true}
-        />
+  ref={cameraRef}
+  style={StyleSheet.absoluteFill}
+  device={device}         // PAS {device: device}
+  isActive={mode === 'camera'}
+  zoom={zoom}
+  photo={true}
+/>
+
       ) : (
         <Text style={styles.loadingText}>
           {hasPermission ? 'Chargement caméra...' : 'Permission caméra refusée'}
@@ -249,12 +286,11 @@ export default function App() {
           </TouchableOpacity>
 
           {/* Photo preview thumbnail */}
-          {photoUri && (
-            <Animated.View
-              style={[styles.previewContainer, {opacity: fadeAnim}]}>
-              <Image source={{uri: photoUri}} style={styles.previewImage} />
-            </Animated.View>
-          )}
+          {lastPhotoUri && (
+          <Animated.View style={[styles.previewContainer, {opacity: fadeAnim}]}>
+            <Image source={{uri: lastPhotoUri}} style={styles.previewImage} />
+          </Animated.View>
+           )}
 
           {/* Finish button */}
           <TouchableOpacity style={styles.finishButton} onPress={onFinish}>
